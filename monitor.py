@@ -1,19 +1,14 @@
-import sys
-import os
-from time import sleep
-from datetime import datetime
-from typing import Dict, Callable, Tuple
+from typing import Dict, Callable, List, Tuple
 
-LOG_FILE = os.path.join(os.getcwd(), "vitals_log.txt")
-
-# --- Vital rules (data-driven, no duplication) --- #
+# --- Vital rules in one config (no duplication) --- #
 VITALS: Dict[str, Dict] = {
     "temperature": {
         "range": (95, 102),
         "warnings": [
-            ("Approaching hypothermia", lambda v, r: r[0] <= v < r[0] + 1.53),
-            ("Approaching hyperthermia", lambda v, r: r[1] - 1.53 < v <= r[1]),
+            ("Approaching hypothermia", lambda v, r: r[0] <= v < r[0] + 1.5),
+            ("Approaching hyperthermia", lambda v, r: r[1] - 1.5 < v <= r[1]),
         ],
+        "critical": "Temperature critical!",
     },
     "pulse": {
         "range": (60, 100),
@@ -21,33 +16,40 @@ VITALS: Dict[str, Dict] = {
             ("Low pulse approaching limit", lambda v, r: r[0] <= v < r[0] + 5),
             ("High pulse approaching limit", lambda v, r: r[1] - 5 < v <= r[1]),
         ],
+        "critical": "Pulse rate critical!",
     },
     "spo2": {
         "range": (90, float("inf")),
         "warnings": [
             ("Approaching hypoxemia (low oxygen)", lambda v, r: r[0] <= v < r[0] + 2),
         ],
+        "critical": "Oxygen saturation critical!",
     },
 }
 
-# --- Helpers --- #
-def log_message(message: str):
-    try:
-        with open(LOG_FILE, "a") as f:
-            f.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}\n")
-    except Exception:
-        pass
-
+# --- Core functions (short + flat) --- #
 def notify(msg: str, critical: bool = False):
-    print(msg)
-    log_message(("ALERT: " if critical else "WARNING: ") + msg)
-    if critical:
-        try:
-            for _ in range(2):  # minimal blink for CI
-                print("*", end="", flush=True)
-                sleep(0.1)
-        except Exception:
-            print("*ALERT*")
+    level = "ALERT" if critical else "Warning"
+    print(f"{level}: {msg}")
 
-# --- Generic vital checker --- #
-def check_vital(name: str, valu_
+def check_vital(name: str, value: float) -> bool:
+    r = VITALS[name]["range"]
+    for msg, cond in VITALS[name]["warnings"]:
+        if cond(value, r):
+            notify(msg)
+    if not (r[0] <= value <= r[1]):
+        notify(VITALS[name]["critical"], critical=True)
+        return False
+    return True
+
+def vitals_ok(temp: float, pulse: int, spo2: int) -> bool:
+    return all([
+        check_vital("temperature", temp),
+        check_vital("pulse", pulse),
+        check_vital("spo2", spo2),
+    ])
+
+# --- Example --- #
+if __name__ == "__main__":
+    vitals_ok(95.2, 97, 91)   # warnings
+    vitals_ok(94.5, 55, 88)   # alerts
