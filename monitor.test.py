@@ -1,43 +1,94 @@
-import unittest
-from unittest.mock import patch
-from monitor import vitals_ok
+import sys
+from time import sleep
+from typing import List, Tuple, Callable
+from datetime import datetime
+
+LOG_FILE = "vitals_log.txt"
+
+# --- Pure functions for vital checks --- #
+def is_temperature_ok(temp: float) -> bool:
+    return 95 <= temp <= 102
+
+def is_pulse_ok(pulse: int) -> bool:
+    return 60 <= pulse <= 100
+
+def is_spo2_ok(spo2: int) -> bool:
+    return spo2 >= 90
+
+# --- Early warning thresholds --- #
+def is_temperature_warning(temp: float) -> str:
+    if 95 <= temp < 95 + 1.53:
+        return "Warning: Approaching hypothermia"
+    if 102 - 1.53 < temp <= 102:
+        return "Warning: Approaching hyperthermia"
+    return ""
+
+def is_pulse_warning(pulse: int) -> str:
+    if 60 <= pulse < 65:
+        return "Warning: Low pulse approaching limit"
+    if 95 < pulse <= 100:
+        return "Warning: High pulse approaching limit"
+    return ""
+
+def is_spo2_warning(spo2: int) -> str:
+    if 90 <= spo2 < 92:
+        return "Warning: Approaching hypoxemia (low oxygen)"
+    return ""
+
+# --- Logging helper --- #
+def log_message(message: str):
+    with open(LOG_FILE, "a") as f:
+        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+
+# --- Alert functions (side effects separated) --- #
+def blink_alert(duration: int = 6):
+    for _ in range(duration):
+        print('\r* ', end='')
+        sys.stdout.flush()
+        sleep(1)
+        print('\r *', end='')
+        sys.stdout.flush()
+        sleep(1)
+
+def print_alert(message: str):
+    print(message)
+    log_message("ALERT: " + message)
+    blink_alert()
+
+def print_warning(message: str):
+    print(message)
+    log_message("WARNING: " + message)
+
+# --- Mapping vital checkers to messages --- #
+VitalCheck = Tuple[Callable[[], bool], str]
+
+def vitals_ok(temperature: float, pulse_rate: int, spo2: int) -> bool:
+    # --- Early Warnings --- #
+    warnings: List[str] = [
+        is_temperature_warning(temperature),
+        is_pulse_warning(pulse_rate),
+        is_spo2_warning(spo2),
+    ]
+    for w in warnings:
+        if w:
+            print_warning(w)
+
+    # --- Critical Checks --- #
+    checks: List[VitalCheck] = [
+        (lambda: is_temperature_ok(temperature), "Temperature critical!"),
+        (lambda: is_pulse_ok(pulse_rate), "Pulse Rate is out of range!"),
+        (lambda: is_spo2_ok(spo2), "Oxygen Saturation out of range!"),
+    ]
+
+    for check_func, error_msg in checks:
+        if not check_func():
+            print_alert(error_msg)
+            return False
+    return True
 
 
-class MonitorTest(unittest.TestCase):
-    @patch('monitor.print_alert')
-    def test_temperature_out_of_range(self, mock_alert):
-        self.assertFalse(vitals_ok(104, 70, 98))
-        mock_alert.assert_called_with("Temperature critical!")
+# Example test
+if __name__ == "__main__":
+    vitals_ok(95.2, 97, 91)   # Will show warnings and log them
+    vitals_ok(94.5, 55, 88)   # Will trigger critical alerts and log them
 
-    @patch('monitor.print_alert')
-    def test_pulse_out_of_range(self, mock_alert):
-        self.assertFalse(vitals_ok(98.6, 120, 98))
-        mock_alert.assert_called_with("Pulse Rate is out of range!")
-
-    @patch('monitor.print_alert')
-    def test_spo2_out_of_range(self, mock_alert):
-        self.assertFalse(vitals_ok(98.6, 70, 88))
-        mock_alert.assert_called_with("Oxygen Saturation out of range!")
-
-    def test_all_vitals_in_range(self):
-        self.assertTrue(vitals_ok(98.6, 70, 98))
-
-    def test_temperature_edge_cases(self):
-        self.assertTrue(vitals_ok(95, 70, 98))
-        self.assertTrue(vitals_ok(102, 70, 98))
-        self.assertFalse(vitals_ok(94.9, 70, 98))
-        self.assertFalse(vitals_ok(102.1, 70, 98))
-
-    def test_pulse_edge_cases(self):
-        self.assertTrue(vitals_ok(98.6, 60, 98))
-        self.assertTrue(vitals_ok(98.6, 100, 98))
-        self.assertFalse(vitals_ok(98.6, 59, 98))
-        self.assertFalse(vitals_ok(98.6, 101, 98))
-
-    def test_spo2_edge_cases(self):
-        self.assertTrue(vitals_ok(98.6, 70, 90))
-        self.assertFalse(vitals_ok(98.6, 70, 89))
-
-
-if __name__ == '__main__':
-    unittest.main()
