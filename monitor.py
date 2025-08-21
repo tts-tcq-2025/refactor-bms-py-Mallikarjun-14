@@ -2,59 +2,49 @@
 def notify(msg, critical=False):
     print(f"{'ALERT' if critical else 'Warning'}: {msg}")
 
-# --- Vital check class --- #
-class Vital:
-    def __init__(self, name, warnings, critical_low=None, critical_high=None):
-        self.name = name
-        self.warnings = warnings        # list of tuples: (msg, condition_func)
-        self.critical_low = critical_low
-        self.critical_high = critical_high
+# --- Temperature checks --- #
+def check_temp1(v): 
+    if 95 <= v < 96.5: notify("Approaching hypothermia")
+def check_temp2(v): 
+    if 100.5 < v <= 102: notify("Approaching hyperthermia")
+def check_temp_critical(v): 
+    if v < 95 or v > 102: notify("Temperature critical!", critical=True)
 
-    def check(self, value):
-        for msg, cond in self.warnings:
-            if cond(value):
-                notify(msg)
-        if (self.critical_low is not None and value < self.critical_low) or \
-           (self.critical_high is not None and value > self.critical_high):
-            notify(f"{self.name} critical!", critical=True)
+# --- Pulse checks --- #
+def check_pulse1(v): 
+    if 60 <= v < 65: notify("Low pulse approaching limit")
+def check_pulse2(v): 
+    if 95 < v <= 100: notify("High pulse approaching limit")
+def check_pulse_critical(v): 
+    if v < 60 or v > 100: notify("Pulse rate critical!", critical=True)
 
-# --- Define vitals --- #
-temperature = Vital(
-    "Temperature",
-    warnings=[
-        ("Approaching hypothermia", lambda v: 95 <= v < 96.5),
-        ("Approaching hyperthermia", lambda v: 100.5 < v <= 102)
-    ],
-    critical_low=95,
-    critical_high=102
-)
+# --- SpO2 checks --- #
+def check_spo21(v): 
+    if 90 <= v < 92: notify("Approaching hypoxemia (low oxygen)")
+def check_spo2_critical(v): 
+    if v < 90: notify("Oxygen saturation critical!", critical=True)
 
-pulse = Vital(
-    "Pulse",
-    warnings=[
-        ("Low pulse approaching limit", lambda v: 60 <= v < 65),
-        ("High pulse approaching limit", lambda v: 95 < v <= 100)
-    ],
-    critical_low=60,
-    critical_high=100
-)
-
-spo2 = Vital(
-    "Oxygen saturation",
-    warnings=[
-        ("Approaching hypoxemia (low oxygen)", lambda v: 90 <= v < 92)
-    ],
-    critical_low=90
-)
-
-# --- Check patients --- #
+# --- Run checks --- #
 if __name__ == "__main__":
-    patients = [
-        (95.2, 97, 91),
-        (94.5, 55, 88),
-    ]
+    # Patient 1
+    t, p, s = 95.2, 97, 91
+    check_temp1(t)
+    check_temp2(t)
+    check_temp_critical(t)
+    check_pulse1(p)
+    check_pulse2(p)
+    check_pulse_critical(p)
+    check_spo21(s)
+    check_spo2_critical(s)
 
-    for temp_val, pulse_val, spo2_val in patients:
-        temperature.check(temp_val)
-        pulse.check(pulse_val)
-        spo2.check(spo2_val)
+    # Patient 2
+    t, p, s = 94.5, 55, 88
+    check_temp1(t)
+    check_temp2(t)
+    check_temp_critical(t)
+    check_pulse1(p)
+    check_pulse2(p)
+    check_pulse_critical(p)
+    check_spo21(s)
+    check_spo2_critical(s)
+(spo2_val)
