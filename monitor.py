@@ -1,7 +1,10 @@
-
 import sys
 from time import sleep
 from typing import List, Tuple, Callable
+import os
+from datetime import datetime
+
+LOG_FILE = os.path.join(os.getcwd(), "vitals_log.txt")
 
 # --- Pure functions for vital checks --- #
 def is_temperature_ok(temp: float) -> bool:
@@ -33,22 +36,36 @@ def is_spo2_warning(spo2: int) -> str:
         return "Warning: Approaching hypoxemia (low oxygen)"
     return ""
 
-# --- Alert functions (side effects separated) --- #
+# --- Logging helper (safe) --- #
+def log_message(message: str):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except Exception as e:
+        print(f"(Logging failed: {e})")
+
+# --- Alert functions (safe in CI) --- #
 def blink_alert(duration: int = 6):
-    for _ in range(duration):
-        print('\r* ', end='')
-        sys.stdout.flush()
-        sleep(1)
-        print('\r *', end='')
-        sys.stdout.flush()
-        sleep(1)
+    try:
+        for _ in range(duration):
+            print('\r* ', end='')
+            sys.stdout.flush()
+            sleep(1)
+            print('\r *', end='')
+            sys.stdout.flush()
+            sleep(1)
+    except Exception:
+        # In CI/CD environments with no terminal
+        print("*ALERT BLINKING* (skipped)")
 
 def print_alert(message: str):
     print(message)
+    log_message("ALERT: " + message)
     blink_alert()
 
 def print_warning(message: str):
     print(message)
+    log_message("WARNING: " + message)
 
 # --- Mapping vital checkers to messages --- #
 VitalCheck = Tuple[Callable[[], bool], str]
