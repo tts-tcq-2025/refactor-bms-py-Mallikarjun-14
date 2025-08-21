@@ -1,4 +1,4 @@
-from typing import Dict, Callable, List, Tuple
+from typing import Dict, List, Tuple, Callable
 
 # --- Warning condition functions --- #
 def temp_low_warning(v, r): return r[0] <= v < r[0] + 1.5
@@ -38,31 +38,29 @@ VITALS: Dict[str, Dict] = {
 
 # --- Core functions --- #
 def notify(msg: str, critical: bool = False):
-    level = "ALERT" if critical else "Warning"
-    print(f"{level}: {msg}")
+    print(f"{'ALERT' if critical else 'Warning'}: {msg}")
 
-def check_vital(name: str, value: float) -> bool:
-    r = VITALS[name]["range"]
-    # Check warnings
-    for msg, condition in VITALS[name]["warnings"]:
-        if condition(value, r):
-            notify(msg)
-    # Check critical
-    if not (r[0] <= value <= r[1]):
-        notify(VITALS[name]["critical"], critical=True)
-        return False
-    return True
+def check_all_vitals(temp: float, pulse: int, spo2: int) -> bool:
+    values = {"temperature": temp, "pulse": pulse, "spo2": spo2}
+    all_ok = True
+    messages: List[Tuple[str, bool]] = []
 
-def vitals_ok(temp: float, pulse: int, spo2: int) -> bool:
-    results = [
-        check_vital("temperature", temp),
-        check_vital("pulse", pulse),
-        check_vital("spo2", spo2),
-    ]
-    return all(results)
+    # Precompute all messages
+    for name, val in values.items():
+        r = VITALS[name]["range"]
+        for msg, cond in VITALS[name]["warnings"]:
+            if cond(val, r):
+                messages.append((msg, False))
+        if not (r[0] <= val <= r[1]):
+            messages.append((VITALS[name]["critical"], True))
+            all_ok = False
+
+    # Notify outside loops
+    for msg, critical in messages:
+        notify(msg, critical)
+    return all_ok
 
 # --- Example usage --- #
 if __name__ == "__main__":
-    vitals_ok(95.2, 97, 91)   # warnings
-    vitals_ok(94.5, 55, 88)   # alerts
-  # alerts
+    check_all_vitals(95.2, 97, 91)   # warnings
+    check_all_vitals(94.5, 55, 88)   # alerts
