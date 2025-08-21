@@ -1,12 +1,12 @@
 import sys
-from time import sleep
-from typing import Dict, Tuple
-from datetime import datetime
 import os
+from time import sleep
+from datetime import datetime
+from typing import Dict, Callable, Tuple
 
 LOG_FILE = os.path.join(os.getcwd(), "vitals_log.txt")
 
-# --- Vital ranges and warning bands (data-driven) --- #
+# --- Vital rules (data-driven, no duplication) --- #
 VITALS: Dict[str, Dict] = {
     "temperature": {
         "range": (95, 102),
@@ -36,46 +36,18 @@ def log_message(message: str):
         with open(LOG_FILE, "a") as f:
             f.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}\n")
     except Exception:
-        print("(Logging skipped)")
+        pass
 
-def blink_alert():
-    try:
-        for _ in range(2):  # shorter for CI
-            print("*", end=" ", flush=True)
-            sleep(0.2)
-    except Exception:
-        print("*ALERT*")
-
-def notify(message: str, critical: bool = False):
-    print(message)
-    log_message(("ALERT: " if critical else "WARNING: ") + message)
+def notify(msg: str, critical: bool = False):
+    print(msg)
+    log_message(("ALERT: " if critical else "WARNING: ") + msg)
     if critical:
-        blink_alert()
+        try:
+            for _ in range(2):  # minimal blink for CI
+                print("*", end="", flush=True)
+                sleep(0.1)
+        except Exception:
+            print("*ALERT*")
 
-# --- Vital checking --- #
-def check_vital(name: str, value: float) -> bool:
-    vrange = VITALS[name]["range"]
-
-    # warnings
-    for msg, cond in VITALS[name]["warnings"]:
-        if cond(value, vrange):
-            notify(f"Warning: {msg}")
-
-    # critical
-    if not (vrange[0] <= value <= vrange[1]):
-        notify(f"{name.capitalize()} critical!", critical=True)
-        return False
-    return True
-
-def vitals_ok(temperature: float, pulse: int, spo2: int) -> bool:
-    return all([
-        check_vital("temperature", temperature),
-        check_vital("pulse", pulse),
-        check_vital("spo2", spo2),
-    ])
-
-# --- Example test --- #
-if __name__ == "__main__":
-    vitals_ok(95.2, 97, 91)   # warnings only
-    vitals_ok(94.5, 55, 88)   # critical alerts
-
+# --- Generic vital checker --- #
+def check_vital(name: str, valu_
