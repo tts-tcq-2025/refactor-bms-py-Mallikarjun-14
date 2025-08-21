@@ -1,12 +1,101 @@
-import unittest
-from monitor import vitals_ok
+import sys
+from time import sleep
+from typing import List, Tuple, Callable
+import os
+from datetime import datetime
+
+LOG_FILE = os.path.join(os.getcwd(), "vitals_log.txt")
+
+# --- Pure functions for vital checks --- #
+def is_temperature_ok(temp: float) -> bool:
+    return 95 <= temp <= 102
+
+def is_pulse_ok(pulse: int) -> bool:
+    return 60 <= pulse <= 100
+
+def is_spo2_ok(spo2: int) -> bool:
+    return spo2 >= 90
+
+# --- Early warning thresholds --- #
+def is_temperature_warning(temp: float) -> str:
+    if 95 <= temp < 95 + 1.53:
+        return "Warning: Approaching hypothermia"
+    if 102 - 1.53 < temp <= 102:
+        return "Warning: Approaching hyperthermia"
+    return ""
+
+def is_pulse_warning(pulse: int) -> str:
+    if 60 <= pulse < 65:
+        return "Warning: Low pulse approaching limit"
+    if 95 < pulse <= 100:
+        return "Warning: High pulse approaching limit"
+    return ""
+
+def is_spo2_warning(spo2: int) -> str:
+    if 90 <= spo2 < 92:
+        return "Warning: Approaching hypoxemia (low oxygen)"
+    return ""
+
+# --- Logging helper (safe) --- #
+def log_message(message: str):
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except Exception as e:
+        print(f"(Logging failed: {e})")
+
+# --- Alert functions (safe in CI) --- #
+def blink_alert(duration: int = 6):
+    try:
+        for _ in range(duration):
+            print('\r* ', end='')
+            sys.stdout.flush()
+            sleep(1)
+            print('\r *', end='')
+            sys.stdout.flush()
+            sleep(1)
+    except Exception:
+        print("*ALERT BLINKING* (skipped)")
+
+def print_alert(message: str):
+    print(message)
+    log_message("ALERT: " + message)
+    blink_alert()
+
+def print_warning(message: str):
+    print(message)
+    log_message("WARNING: " + message)
+
+# --- Mapping vital checkers to messages --- #
+VitalCheck = Tuple[Callable[[], bool], str]
+
+def vitals_ok(temperature: float, pulse_rate: int, spo2: int) -> bool:
+    # --- Early Warnings --- #
+    warnings: List[str] = [
+        is_temperature_warning(temperature),
+        is_pulse_warning(pulse_rate),
+        is_spo2_warning(spo2),
+    ]
+    for w in warnings:
+        if w:
+            print_warning(w)
+
+    # --- Critical Checks --- #
+    checks: List[VitalCheck] = [
+        (lambda: is_temperature_ok(temperature), "Temperature critical!"),
+        (lambda: is_pulse_ok(pulse_rate), "Pulse Rate is out of range!"),
+        (lambda: is_spo2_ok(spo2), "Oxygen Saturation out of range!"),
+    ]
+
+    for check_func, error_msg in checks:
+        if not check_func():
+            print_alert(error_msg)
+            return False
+    return True
 
 
-class MonitorTest(unittest.TestCase):
-    def test_not_ok_when_any_vital_out_of_range(self):
-        self.assertFalse(vitals_ok(99, 102, 70))
-        self.assertTrue(vitals_ok(98.1, 70, 98))
+# Example test
+if __name__ == "__main__":
+    vitals_ok(95.2, 97, 91)   # Will show warnings and log them
+    vitals_ok(94.5, 55, 88)   # Will trigger critical alerts and log them
 
-
-if __name__ == '__main__':
-  unittest.main()

@@ -46,3 +46,16 @@ Shorten the Semantic distance
 - Functional to express relation between input and output
 - Object oriented to encapsulate state with actions
 - Aspect oriented to capture repeating aspects
+
+## What Changed 
+
+Added early warning functions for temperature, pulse, and SpO₂.
+
+Warnings are printed (but no blinking alert).
+
+Critical alerts still trigger the blinking alarm.
+
+This way, caregivers get pre-warnings before crisis.
+
+**Extension Selected:** Early Warning – Added warnings for approaching hypothermia, hyperthermia, abnormal pulse, and low oxygen saturation before triggering critical alarms.
+
