@@ -1,46 +1,23 @@
 import sys
 from time import sleep
-from typing import List, Tuple, Callable
-import os
+from typing import Callable, List, Tuple
 from datetime import datetime
+import os
 
 LOG_FILE = os.path.join(os.getcwd(), "vitals_log.txt")
 
-# --- Pure functions for vital checks --- #
-def is_temperature_ok(temp: float) -> bool:
-    return 95 <= temp <= 102
-
-def is_pulse_ok(pulse: int) -> bool:
-    return 60 <= pulse <= 100
-
-def is_spo2_ok(spo2: int) -> bool:
-    return spo2 >= 90
-
-# --- Early warning thresholds --- #
-def is_temperature_warning(temp: float) -> str:
-    if 95 <= temp < 95 + 1.53:
-        return "Warning: Approaching hypothermia"
-    if 102 - 1.53 < temp <= 102:
-        return "Warning: Approaching hyperthermia"
-    return ""
-
-def is_pulse_warning(pulse: int) -> str:
-    if 60 <= pulse < 65:
-        return "Warning: Low pulse approaching limit"
-    if 95 < pulse <= 100:
-        return "Warning: High pulse approaching limit"
-    return ""
-
-def is_spo2_warning(spo2: int) -> str:
-    if 90 <= spo2 < 92:
-        return "Warning: Approaching hypoxemia (low oxygen)"
-    return ""
+# --- Configurable ranges and warning thresholds --- #
+VITAL_RANGES = {
+    "temperature": {"ok": (95, 102), "warn": (1.53, "Temperature")},
+    "pulse": {"ok": (60, 100), "warn": (5, "Pulse Rate")},
+    "spo2": {"ok": (90, float("inf")), "warn": (2, "Oxygen Saturation")},
+}
 
 # --- Logging helper (safe) --- #
 def log_message(message: str):
     try:
         with open(LOG_FILE, "a") as f:
-            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+            f.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {message}\n")
     except Exception as e:
         print(f"(Logging failed: {e})")
 
@@ -55,7 +32,6 @@ def blink_alert(duration: int = 6):
             sys.stdout.flush()
             sleep(1)
     except Exception:
-        # In CI/CD environments with no terminal
         print("*ALERT BLINKING* (skipped)")
 
 def print_alert(message: str):
@@ -67,35 +43,44 @@ def print_warning(message: str):
     print(message)
     log_message("WARNING: " + message)
 
-# --- Mapping vital checkers to messages --- #
-VitalCheck = Tuple[Callable[[], bool], str]
+# --- Generic check functions --- #
+def in_range(value: float, min_val: float, max_val: float) -> bool:
+    return min_val <= value <= max_val
 
-def vitals_ok(temperature: float, pulse_rate: int, spo2: int) -> bool:
-    # --- Early Warnings --- #
-    warnings: List[str] = [
-        is_temperature_warning(temperature),
-        is_pulse_warning(pulse_rate),
-        is_spo2_warning(spo2),
-    ]
-    for w in warnings:
-        if w:
-            print_warning(w)
+def check_vital(name: str, value: float) -> bool:
+    ok_min, ok_max = VITAL_RANGES[name]["ok"]
+    warn_range, label = VITAL_RANGES[name]["warn"]
 
-    # --- Critical Checks --- #
-    checks: List[VitalCheck] = [
-        (lambda: is_temperature_ok(temperature), "Temperature critical!"),
-        (lambda: is_pulse_ok(pulse_rate), "Pulse Rate is out of range!"),
-        (lambda: is_spo2_ok(spo2), "Oxygen Saturation out of range!"),
-    ]
+    # Warning check
+    if name == "temperature":
+        if ok_min <= value < ok_min + warn_range:
+            print_warning(f"Warning: Approaching hypothermia")
+        elif ok_max - warn_range < value <= ok_max:
+            print_warning(f"Warning: Approaching hyperthermia")
+    elif name == "pulse":
+        if ok_min <= value < ok_min + warn_range:
+            print_warning(f"Warning: Low pulse approaching limit")
+        elif ok_max - warn_range < value <= ok_max:
+            print_warning(f"Warning: High pulse approaching limit")
+    elif name == "spo2":
+        if ok_min <= value < ok_min + warn_range:
+            print_warning(f"Warning: Approaching hypoxemia (low oxygen)")
 
-    for check_func, error_msg in checks:
-        if not check_func():
-            print_alert(error_msg)
-            return False
+    # Critical check
+    if not in_range(value, ok_min, ok_max):
+        print_alert(f"{label} critical!")
+        return False
     return True
 
+# --- Main vital check --- #
+def vitals_ok(temperature: float, pulse_rate: int, spo2: int) -> bool:
+    return all([
+        check_vital("temperature", temperature),
+        check_vital("pulse", pulse_rate),
+        check_vital("spo2", spo2),
+    ])
 
-# Example test
+# --- Example test --- #
 if __name__ == "__main__":
     vitals_ok(95.2, 97, 91)   # Will show warnings
     vitals_ok(94.5, 55, 88)   # Will trigger critical alerts
